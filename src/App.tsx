@@ -303,6 +303,13 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+
+  // Password Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
   // Fetch initial profile image
   useEffect(() => {
     fetch('/api/profile')
@@ -341,42 +348,67 @@ export default function App() {
   }, []);
 
   // Handle profile image upload
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const password = window.prompt("Enter Admin Password to update profile picture:");
-      if (!password) {
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-
-      setIsUploading(true);
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64Image = ev.target?.result as string;
-        try {
-          const res = await fetch('/api/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: base64Image, password })
-          });
-          
-          const data = await res.json();
-          if (res.ok && data.url) {
-            setProfileImage(data.url);
-            alert("Profile picture updated successfully!");
-          } else {
-            alert("Upload failed: " + (data.error || "Unknown error"));
-          }
-        } catch (err) {
-          alert("Upload failed. Check your connection.");
-        } finally {
-          setIsUploading(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      };
-      reader.readAsDataURL(file);
+      setPendingFile(file);
+      setShowPasswordModal(true);
+      setAdminPassword("");
+      setShowPassword(false);
     }
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!adminPassword || !pendingFile) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setShowPasswordModal(false);
+      return;
+    }
+
+    setIsUploading(true);
+    setShowPasswordModal(false);
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64Image = ev.target?.result as string;
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image, password: adminPassword })
+        });
+        
+        const data = await res.json();
+        if (res.ok && data.url) {
+          setProfileImage(data.url);
+          alert("Profile picture updated successfully!");
+        } else {
+          alert("Upload failed: " + (data.error || "Unknown error"));
+        }
+      } catch (err) {
+        // Fallback for local testing when the backend isn't running
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          console.warn("Backend not found. Falling back to local state update for testing.");
+          setProfileImage(base64Image);
+          alert("[Local Test Mode] Profile picture updated successfully (frontend only)!");
+        } else {
+          alert("Upload failed. Check your connection.");
+        }
+      } finally {
+        setIsUploading(false);
+        setPendingFile(null);
+        setAdminPassword("");
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(pendingFile);
+  };
+
+  const handlePasswordCancel = () => {
+    setShowPasswordModal(false);
+    setPendingFile(null);
+    setAdminPassword("");
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Send WhatsApp message
@@ -643,7 +675,7 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-violet-900/60 to-blue-900/60 flex flex-col items-center justify-center text-center gap-3 cursor-pointer relative"
+                  <div className="w-full h-full bg-gradient-to-br from-violet-900/60 to-blue-900/60 flex flex-col items-center justify-center text-center gap-3 relative cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}>
                     <div className={`w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-3xl font-black ${isUploading ? 'opacity-50' : 'opacity-100'}`}>
                       AA
@@ -663,7 +695,7 @@ export default function App() {
               {/* Upload button overlay */}
               <motion.button
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-violet-600 hover:bg-violet-500 flex items-center justify-center shadow-lg transition-colors z-10"
+                className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-violet-600 hover:bg-violet-500 flex items-center justify-center shadow-lg transition-colors z-10 text-white"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 title="Upload photo from gallery"
@@ -1312,6 +1344,76 @@ export default function App() {
           </div>
         </div>
       </Section>
+
+      {/* ── Password Modal ── */}
+      <AnimatePresence>
+        {showPasswordModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className={`w-full max-w-md p-6 rounded-2xl shadow-2xl ${isDark ? "bg-[#0f0f23] border border-white/10" : "bg-white border border-gray-200"}`}
+            >
+              <h3 className={`text-xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Enter Admin Password
+              </h3>
+              <p className={`text-sm mb-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                Please enter the password to update your profile picture.
+              </p>
+              
+              <div className="mb-4">
+                <div className={`relative border ${isDark ? "border-gray-600 focus-within:border-violet-500" : "border-gray-300 focus-within:border-violet-500"} rounded-lg transition-colors`}>
+                  <label className={`absolute -top-2.5 left-3 px-1 text-xs font-medium ${isDark ? "bg-[#0f0f23] text-gray-400" : "bg-white text-gray-500"}`}>
+                    Enter your password
+                  </label>
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className={`w-full px-4 py-3 bg-transparent outline-none ${isDark ? "text-white" : "text-gray-900"} rounded-lg`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handlePasswordSubmit();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mb-8">
+                <input 
+                  type="checkbox" 
+                  id="showPasswordCheck"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-400 text-violet-600 focus:ring-violet-500 bg-transparent cursor-pointer"
+                />
+                <label htmlFor="showPasswordCheck" className={`text-sm cursor-pointer select-none ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  Show password
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={handlePasswordCancel}
+                  className={`px-5 py-2.5 rounded-xl font-medium ${isDark ? "bg-white/5 hover:bg-white/10 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"} transition-colors`}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handlePasswordSubmit}
+                  className="px-5 py-2.5 rounded-xl font-medium bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/25 transition-all hover:-translate-y-0.5"
+                >
+                  Submit
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Footer ── */}
       <footer className="py-10 border-t border-white/5 text-center text-gray-600 text-sm">
